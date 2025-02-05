@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Pipeline Lineage</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
+    <script>
+        window.addEventListener('error', function(e) {
+            console.error('Script error:', e);
+        });
+    </script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body {
+            transition: background-color 0.3s ease;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+        .main-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        .sidebar {
+            width: 250px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-right: 1px solid #dee2e6;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            transition: all 0.3s ease;
+        }
+        .content-area {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        #lineage-network {
+            width: 100%;
+            height: 800px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            margin: 20px 0;
+            position: relative;
+            background-color: var(--network-bg, #ffffff);
+        }
+        .control-group {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        .control-group:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .control-group h5 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-weight: 600;
+        }
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .btn {
+            transition: all 0.3s ease;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn:hover {
+            transform: translateX(5px);
+        }
+        .btn.active {
+            background-color: #0d6efd;
+            color: white;
+        }
+        .btn i {
+            width: 20px;
+            text-align: center;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .right-controls {
+            display: flex;
+            gap: 10px;
+        }
+        .search-container {
+            margin-bottom: 20px;
+        }
+        .theme-btn {
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        .theme-btn:hover {
+            transform: translateY(-2px);
+        }
+        /* Dark theme */
+        body.dark-theme {
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        body.dark-theme #lineage-network {
+            border-color: #333;
+        }
+        /* Light theme */
+        body.light-theme {
+            background-color: #ffffff;
+            color: #333333;
+        }
+        /* Nature theme */
+        body.nature-theme {
+            background-color: #f0f7f0;
+            color: #2c4a2c;
+        }
+        /* Ocean theme */
+        body.ocean-theme {
+            background-color: #e6f3f7;
+            color: #1a4c5e;
+        }
+        /* Sunset theme */
+        body.sunset-theme {
+            background-color: #fff1e6;
+            color: #8b4513;
+        }
+        .schema-preview {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-width: 1000px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            display: none;
+        }
+        .path-section {
+            margin: 15px 0;
+        }
+        .path-section h4 {
+            color: #333;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #eee;
+        }
+        .paths-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .path-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+        }
+        .path-card h5 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        .schema-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        .schema-table th, .schema-table td {
+            padding: 8px;
+            border: 1px solid #dee2e6;
+            text-align: left;
+        }
+        .schema-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        .schema-preview table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .schema-preview th, .schema-preview td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        .schema-preview th {
+            background-color: #f5f5f5;
+        }
+        .schema-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+            display: none;
+        }
+        .search-container {
+            margin-bottom: 20px;
+        }
+        .search-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .search-results {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: none;
+        }
+        .search-result-item {
+            padding: 8px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .search-result-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        /* Raw Data View Styles */
+        .raw-data-container {
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background: white;
+        }
+
+        .data-table th,
+        .data-table td {
+            border: 1px solid #dee2e6;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .data-table th {
+            background-color: #0d6efd;
+            color: white;
+            font-weight: 500;
+        }
+
+        .data-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .data-table tr:hover {
+            background-color: #e9ecef;
+        }
+
+        .data-table pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-width: 500px;
+            font-size: 0.9em;
+        }
+        .view-controls {
+            margin-bottom: 20px;
+        }
+        /* Custom colors for dependency view */
+        .selected-node {
+            background-color: #ffd700 !important;
+            border-color: #b8860b !important;
+        }
+        .upstream-node {
+            background-color: #98fb98 !important;
+            border-color: #228b22 !important;
+        }
+        .downstream-node {
+            background-color: #87ceeb !important;
+            border-color: #4682b4 !important;
+        }
+        .layout-option.active {
+            background-color: #007bff !important;
+            color: white !important;
+        }
+        .dropdown-item:hover {
+            background-color: #f8f9fa;
+        }
+        .nav-tabs .nav-link {
+            color: #495057;
+        }
+        .nav-tabs .nav-link.active {
+            color: #007bff;
+            font-weight: 500;
+        }
+        /* Add these styles */
+        .upstream-dags {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .upstream-dags h4 {
+            margin-bottom: 10px;
+            color: #495057;
+        }
+        .upstream-dag-item {
+            margin-bottom: 5px;
+            padding: 5px;
+            background-color: #e9ecef;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="light-theme">
+    <div class="main-container">
+        <div class="content-area">
+        <div class="main-container">
+            <!-- Left Sidebar -->
+            <div class="sidebar">
+                <!-- View Controls -->
+                <div class="control-group">
+                    <h5>View</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-light active" onclick="showFullGraph()">
+                            <i class="fas fa-project-diagram"></i> Full Graph
+                        </button>
+                        <button class="btn btn-light" onclick="clearSearch()">
+                            <i class="fas fa-times-circle"></i> Clear Selection
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Layout Controls -->
+                <div class="control-group">
+                    <h5>Layout</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-light active" onclick="setLayout('hierarchical')">
+                            <i class="fas fa-sitemap"></i> Hierarchical
+                        </button>
+                        <button class="btn btn-light" onclick="setLayout('force')">
+                            <i class="fas fa-atom"></i> Force-Directed
+                        </button>
+                        <button class="btn btn-light" onclick="setLayout('circular')">
+                            <i class="fas fa-circle-notch"></i> Circular
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Physics Controls -->
+                <div class="control-group">
+                    <h5>Controls</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-light" id="physicsBtn" onclick="togglePhysics()">
+                            <i class="fas fa-magnet"></i> Physics: On
+                        </button>
+                        <button class="btn btn-light" onclick="network.fit()">
+                            <i class="fas fa-compress-arrows-alt"></i> Reset View
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Theme Controls -->
+                <div class="control-group">
+                    <h5>Theme</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-light active" onclick="setTheme('light-theme')">
+                            <i class="fas fa-sun"></i> Light
+                        </button>
+                        <button class="btn btn-light" onclick="setTheme('dark-theme')">
+                            <i class="fas fa-moon"></i> Dark
+                        </button>
+                        <button class="btn btn-light" onclick="setTheme('nature-theme')">
+                            <i class="fas fa-leaf"></i> Nature
+                        </button>
+                        <button class="btn btn-light" onclick="setTheme('ocean-theme')">
+                            <i class="fas fa-water"></i> Ocean
+                        </button>
+                        <button class="btn btn-light" onclick="setTheme('sunset-theme')">
+                            <i class="fas fa-sunset"></i> Sunset
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="content-area">
+                <div class="top-bar">
+                    <h1>Data Pipeline Lineage Visualization</h1>
+                    <div class="right-controls">
+                        <button class="btn btn-secondary" onclick="toggleFullscreen()">
+                            <i class="fas fa-expand"></i> Fullscreen
+                        </button>
+                        <button class="btn btn-info" onclick="togglePathView()">
+                            <i class="fas fa-project-diagram"></i> Path View
+                        </button>
+                        <a href="/schema" class="btn btn-primary">
+                            <i class="fas fa-table"></i> View Schema
+                        </a>
+                    </div>
+                </div>
+
+                <div class="search-container">
+                    <input type="text" id="searchInput" class="form-control search-input" placeholder="Search for a dataset..." />
+                    <div id="searchResults" class="search-results"></div>
+                </div>
+
+                <div id="lineage-network"></div>
+        <div id="rawDataView" style="display: none;" class="raw-data-container">
+            <div class="table-container">
+                <h2>Datasets</h2>
+                <table id="datasetsTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Dataset Name</th>
+                            <th>Type</th>
+                            <th>Path</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+
+                <h2>Schemas</h2>
+                <table id="schemasTable" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Dataset Path</th>
+                            <th>Schema Definition</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="schema-overlay" onclick="hideSchemaPreview()"></div>
+    <div class="schema-preview">
+        <h3 id="schema-preview-title"></h3>
+        <div id="dataset-details">
+            <div class="path-section">
+                <h4>Upstream Paths</h4>
+                <div id="upstream-paths" class="paths-list"></div>
+            </div>
+            <div class="path-section">
+                <h4>Downstream Paths</h4>
+                <div id="downstream-paths" class="paths-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:5001';
+        let network = null;
+        let physicsEnabled = true;
+        let allNodes = null;
+        let isRawDataView = false;
+        let searchTimeout = null;
+        let currentLayout = 'hierarchical';
+        let isPathView = false;
+        
+        const themes = {
+            light: {
+                background: '#ffffff',
+                nodes: {
+                    source: {
+                        color: { background: '#4CAF50', border: '#388E3C', highlight: { background: '#81C784', border: '#388E3C' } }
+                    },
+                    intermediate: {
+                        color: { background: '#2196F3', border: '#1976D2', highlight: { background: '#64B5F6', border: '#1976D2' } }
+                    },
+                    target: {
+                        color: { background: '#9C27B0', border: '#7B1FA2', highlight: { background: '#BA68C8', border: '#7B1FA2' } }
+                    }
+                },
+                edges: { color: '#90A4AE' }
+            },
+            dark: {
+                background: '#1a1a1a',
+                nodes: {
+                    source: {
+                        color: { background: '#388E3C', border: '#1B5E20', highlight: { background: '#4CAF50', border: '#1B5E20' } }
+                    },
+                    intermediate: {
+                        color: { background: '#1976D2', border: '#0D47A1', highlight: { background: '#2196F3', border: '#0D47A1' } }
+                    },
+                    target: {
+                        color: { background: '#7B1FA2', border: '#4A148C', highlight: { background: '#9C27B0', border: '#4A148C' } }
+                    }
+                },
+                edges: { color: '#546E7A' }
+            },
+            nature: {
+                background: '#f0f7f0',
+                nodes: {
+                    source: {
+                        color: { background: '#2E7D32', border: '#1B5E20', highlight: { background: '#43A047', border: '#1B5E20' } }
+                    },
+                    intermediate: {
+                        color: { background: '#558B2F', border: '#33691E', highlight: { background: '#689F38', border: '#33691E' } }
+                    },
+                    target: {
+                        color: { background: '#827717', border: '#524C00', highlight: { background: '#9E9D24', border: '#524C00' } }
+                    }
+                },
+                edges: { color: '#33691E' }
+            },
+            ocean: {
+                background: '#e6f3f7',
+                nodes: {
+                    source: {
+                        color: { background: '#0288D1', border: '#01579B', highlight: { background: '#03A9F4', border: '#01579B' } }
+                    },
+                    intermediate: {
+                        color: { background: '#0097A7', border: '#006064', highlight: { background: '#00BCD4', border: '#006064' } }
+                    },
+                    target: {
+                        color: { background: '#00796B', border: '#004D40', highlight: { background: '#009688', border: '#004D40' } }
+                    }
+                },
+                edges: { color: '#0277BD' }
+            },
+            sunset: {
+                background: '#fff1e6',
+                nodes: {
+                    source: {
+                        color: { background: '#FF5722', border: '#D84315', highlight: { background: '#FF7043', border: '#D84315' } }
+                    },
+                    intermediate: {
+                        color: { background: '#F4511E', border: '#BF360C', highlight: { background: '#FF5722', border: '#BF360C' } }
+                    },
+                    target: {
+                        color: { background: '#D84315', border: '#A72700', highlight: { background: '#F4511E', border: '#A72700' } }
+                    }
+                },
+                edges: { color: '#BF360C' }
+            }
+        };
+
+        function setTheme(themeName) {
+            // Remove -theme suffix if present
+            const baseThemeName = themeName.replace('-theme', '');
+            
+            // Remove all theme classes
+            document.body.classList.remove('light-theme', 'dark-theme', 'nature-theme', 'ocean-theme', 'sunset-theme');
+            document.body.classList.add(`${baseThemeName}-theme`);
+            
+            const theme = themes[baseThemeName];
+            if (!theme) return;
+
+            const container = document.getElementById('lineage-network');
+            if (container) {
+                container.style.backgroundColor = theme.background;
+            }
+            
+            if (network) {
+                const groups = {};
+                Object.keys(theme.nodes).forEach(groupName => {
+                    groups[groupName] = {
+                        color: theme.nodes[groupName].color
+                    };
+                });
+                
+                network.setOptions({
+                    nodes: {
+                        font: { color: '#fff' }
+                    },
+                    groups: groups,
+                    edges: {
+                        color: theme.edges.color,
+                        width: 2
+                    }
+                });
+            }
+
+            // Update active button state
+            const themeButtons = document.querySelectorAll('.control-group .btn[onclick*="setTheme"]');
+            themeButtons.forEach(btn => {
+                const btnTheme = btn.getAttribute('onclick').match(/['"]([^'"]+)['"]/);
+                if (btnTheme && btnTheme[1].replace('-theme', '') === baseThemeName) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            // Store theme preference
+            localStorage.setItem('preferredTheme', `${baseThemeName}-theme`);
+        }
+
+        function togglePhysics() {
+            physicsEnabled = !physicsEnabled;
+            network.setOptions({ physics: { enabled: physicsEnabled } });
+            
+            // Update button text
+            const physicsBtn = document.getElementById('physicsBtn');
+            physicsBtn.innerHTML = `<i class="fas fa-magnet"></i> Physics: ${physicsEnabled ? 'On' : 'Off'}`;
+            physicsBtn.classList.toggle('active', physicsEnabled);
+        }
+
+        function showDependencies(path) {
+            fetch(`${BASE_URL}/api/lineage/dependencies/${encodeURIComponent(path.substring(1))}`)
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('lineage-network');
+                    const options = getNetworkOptions();
+                    
+                    // Add custom colors for dependency view
+                    options.groups = {
+                        ...options.groups,
+                        selected: {
+                            color: { background: '#ffd700', border: '#b8860b' }
+                        },
+                        upstream: {
+                            color: { background: '#98fb98', border: '#228b22' }
+                        },
+                        downstream: {
+                            color: { background: '#87ceeb', border: '#4682b4' }
+                        }
+                    };
+                    
+                    network.setData(data);
+                    network.setOptions(options);
+                    network.fit();
+                })
+                .catch(error => console.error('Error loading dependencies:', error));
+        }
+
+        function showFullGraph() {
+            // Update active button
+            const viewButtons = document.querySelectorAll('.control-group:nth-child(1) .btn');
+            viewButtons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.includes('Full Graph')) {
+                    btn.classList.add('active');
+                }
+            });
+
+            // Remove any existing network event listeners
+            if (network) {
+                network.off('doubleClick');
+            }
+
+            const endpoint = isPathView ? `${BASE_URL}/api/lineage/path_view` : `${BASE_URL}/api/lineage`;
+            fetch(endpoint)
+                .then(response => response.json())
+                .then(data => {
+                    const options = getNetworkOptions();
+                    if (isPathView) {
+                        options.groups = {
+                            ...options.groups,
+                            dataset: {
+                                shape: 'dot',
+                                color: { background: '#2196F3', border: '#1976D2' },
+                                font: { size: 14 },
+                                size: 25,
+                                level: 2  // Datasets will be on level 2
+                            },
+                            path: {
+                                shape: 'diamond',
+                                color: { background: '#4CAF50', border: '#388E3C' },
+                                font: { size: 12 },
+                                size: 20,
+                                level: 1  // Paths will be on level 1
+                            }
+                        };
+                        // Configure tooltips for path view
+                        options.nodes = {
+                            ...options.nodes,
+                            tooltipDelay: 100,
+                            title: undefined  // This ensures the title attribute is used as tooltip
+                        };
+                        options.interaction = {
+                            ...options.interaction,
+                            hover: true,
+                            tooltipDelay: 100
+                        };
+                        // Configure hierarchical layout
+                        options.layout = {
+                            hierarchical: {
+                                direction: 'LR',
+                                sortMethod: 'directed',
+                                levelSeparation: 150,  // Reduced to make the flow more compact
+                                nodeSpacing: 100,      // Reduced for better vertical spacing
+                                treeSpacing: 200
+                            }
+                        };
+                        options.physics = {
+                            hierarchicalRepulsion: {
+                                nodeDistance: 150,
+                                springLength: 200
+                            },
+                            stabilization: {
+                                enabled: true,
+                                iterations: 1000,
+                                updateInterval: 50
+                            }
+                        };
+                        // Path view specific options
+                        options.groups = {
+                            dataset: {
+                                shape: 'dot',
+                                color: { background: '#2196F3', border: '#1976D2' },
+                                borderWidth: 2,
+                                size: 25,
+                                font: { size: 14, color: '#000000' }
+                            },
+                            path: {
+                                shape: 'diamond',
+                                color: { background: '#4CAF50', border: '#388E3C' },
+                                borderWidth: 2,
+                                size: 20,
+                                font: { size: 12, color: '#000000' }
+                            }
+                        };
+                    }
+                    network.setData(data);
+                    network.setOptions(options);
+                    network.fit();
+                })
+                .catch(error => console.error('Error loading full graph:', error));
+        }
+
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('searchResults').style.display = 'none';
+            
+            // Update active button
+            const viewButtons = document.querySelectorAll('.control-group:nth-child(1) .btn');
+            viewButtons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.includes('Clear Selection')) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            showFullGraph();
+        }
+
+        function setupSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const searchResults = document.getElementById('searchResults');
+
+            searchInput.addEventListener('input', function(e) {
+                const query = e.target.value.toLowerCase();
+                
+                // Clear previous timeout
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+                
+                // Set new timeout to prevent too many updates
+                searchTimeout = setTimeout(() => {
+                    if (query.length < 2) {
+                        searchResults.style.display = 'none';
+                        return;
+                    }
+
+                    // Filter nodes based on search query
+                    const matchingNodes = allNodes.filter(node => 
+                        node.label.toLowerCase().includes(query)
+                    );
+
+                    // Display results
+                    searchResults.innerHTML = matchingNodes
+                        .map(node => `
+                            <div class="search-result-item" onclick="selectNode('${node.id}')">
+                                ${node.label}
+                            </div>
+                        `)
+                        .join('');
+                    
+                    searchResults.style.display = matchingNodes.length > 0 ? 'block' : 'none';
+                }, 300);
+            });
+        }
+
+        function selectNode(nodeId) {
+            document.getElementById('searchResults').style.display = 'none';
+            showDependencies(nodeId);
+        }
+
+        function setLayout(layout) {
+            currentLayout = layout;
+            
+            // Update active button state
+            const layoutButtons = document.querySelectorAll('.control-group .btn[onclick*="setLayout"]');
+            layoutButtons.forEach(btn => {
+                const btnLayout = btn.getAttribute('onclick').match(/['"]([^'"]+)['"]/);
+                if (btnLayout && btnLayout[1] === layout) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            // Get current data and apply layout
+            if (network) {
+                const data = network.body.data;
+                const options = getNetworkOptions();
+                network.setOptions(options);
+                network.setData(data);
+                network.stabilize();
+                network.fit();
+            }
+        }
+
+        function getNetworkOptions() {
+            const baseOptions = {
+                nodes: {
+                    margin: 10,
+                    widthConstraint: {
+                        minimum: 120,
+                        maximum: 200
+                    },
+                    font: {
+                        size: 14,
+                        multi: true
+                    }
+                },
+                groups: {
+                    bronze_dataset: {
+                        shape: 'box',
+                        color: { background: '#FFB74D', border: '#F57C00' },  // Orange for Bronze
+                        borderWidth: 2,
+                        font: { size: 14, color: '#000000' }
+                    },
+                    silver_dataset: {
+                        shape: 'box',
+                        color: { background: '#E0E0E0', border: '#9E9E9E' },  // Silver/Gray
+                        borderWidth: 2,
+                        font: { size: 14, color: '#000000' }
+                    },
+                    gold_dataset: {
+                        shape: 'box',
+                        color: { background: '#FFD700', border: '#FFA000' },  // Gold
+                        borderWidth: 2,
+                        font: { size: 14, color: '#000000' }
+                    },
+                    path: {
+                        shape: 'diamond',
+                        color: { background: '#E8F5E9', border: '#4CAF50' },  // Light green
+                        borderWidth: 2,
+                        size: 15,
+                        font: { size: 12, color: '#000000' }
+                    },
+                    dataset: {
+                        shape: 'box',
+                        color: { background: '#fff3e0', border: '#FF9800' },
+                        borderWidth: 2,
+                        font: { size: 14, color: '#000000' }
+                    }
+                },
+                edges: {
+                    arrows: 'to',
+                    smooth: {
+                        type: 'cubicBezier',
+                        forceDirection: 'vertical',
+                        roundness: 0.4
+                    }
+                },
+                physics: {
+                    enabled: physicsEnabled,
+                    stabilization: {
+                        enabled: true,
+                        iterations: 1000,
+                        updateInterval: 100,
+                        fit: true
+                    }
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 300,
+                    zoomView: true,
+                    dragView: true,
+                    navigationButtons: true,
+                    keyboard: true
+                }
+            };
+
+            // Layout-specific options
+            switch (currentLayout) {
+                case 'hierarchical':
+                    baseOptions.layout = {
+                        hierarchical: {
+                            enabled: true,
+                            direction: 'UD',
+                            sortMethod: 'directed',
+                            nodeSpacing: 150,
+                            levelSeparation: 200,
+                            treeSpacing: 200
+                        }
+                    };
+                    baseOptions.physics.hierarchicalRepulsion = {
+                        centralGravity: 0.8,
+                        springLength: 200,
+                        springConstant: 0.3,
+                        nodeDistance: 200,
+                        damping: 0.5
+                    };
+                    baseOptions.physics.solver = 'hierarchicalRepulsion';
+                    break;
+
+                case 'force':
+                    baseOptions.layout = {
+                        hierarchical: {
+                            enabled: false
+                        }
+                    };
+                    baseOptions.physics = {
+                        enabled: true,
+                        barnesHut: {
+                            gravitationalConstant: -2000,
+                            centralGravity: 0.3,
+                            springLength: 200,
+                            springConstant: 0.04,
+                            damping: 0.09
+                        },
+                        stabilization: {
+                            enabled: true,
+                            iterations: 1000,
+                            updateInterval: 100
+                        }
+                    };
+                    baseOptions.edges.smooth = {
+                        type: 'continuous'
+                    };
+                    break;
+
+                case 'circular':
+                    baseOptions.layout = {
+                        hierarchical: {
+                            enabled: false
+                        }
+                    };
+                    baseOptions.physics = {
+                        enabled: true,
+                        forceAtlas2Based: {
+                            gravitationalConstant: -50,
+                            centralGravity: 0.01,
+                            springLength: 200,
+                            springConstant: 0.08,
+                            damping: 0.4,
+                            avoidOverlap: 1
+                        },
+                        maxVelocity: 50,
+                        minVelocity: 0.1,
+                        solver: 'forceAtlas2Based',
+                        stabilization: {
+                            enabled: true,
+                            iterations: 1000,
+                            updateInterval: 100
+                        }
+                    };
+                    baseOptions.edges.smooth = {
+                        type: 'curvedCW',
+                        roundness: 0.2
+                    };
+                    break;
+            }
+
+            return baseOptions;
+        }
+
+        function showSchemaPreview(path) {
+            const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+            console.log('Fetching schema for path:', cleanPath);
+            fetch(`${BASE_URL}/api/schema/${encodeURIComponent(cleanPath)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const schemaPreview = document.querySelector('.schema-preview');
+                    const schemaTitle = document.getElementById('schema-preview-title');
+                    const schemaContent = document.getElementById('schema-preview-content');
+                    
+                    schemaTitle.textContent = `Schema: ${path}`;
+                    
+                    let content = '<div class="schema-fields">';
+                    content += '<table class="table table-striped">';
+                    content += '<thead><tr><th>Field</th><th>Type</th></tr></thead>';
+                    content += '<tbody>';
+                    
+                    data.schema.fields.forEach(field => {
+                        content += `<tr><td>${field.name}</td><td>${field.type}</td></tr>`;
+                    });
+                    
+                    content += '</tbody></table></div>';
+                    
+                    // Add upstream DAGs section
+                    if (data.upstream_dags && data.upstream_dags.length > 0) {
+                        content += '<div class="upstream-dags">';
+                        content += '<h4>Upstream DAGs:</h4>';
+                        data.upstream_dags.forEach(dag => {
+                            content += `<div class="upstream-dag-item">`;
+                            content += `<strong>Name:</strong> ${dag.name}<br>`;
+                            content += `<strong>Path:</strong> ${dag.path}`;
+                            content += '</div>';
+                        });
+                        content += '</div>';
+                    }
+                    
+                    schemaContent.innerHTML = content;
+                    schemaPreview.style.display = 'block';
+                    document.querySelector('.schema-overlay').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error loading schema:', error);
+                    alert('Error loading schema information');
+                });
+        }
+
+        function hideSchemaPreview() {
+            document.querySelector('.schema-overlay').style.display = 'none';
+            document.querySelector('.schema-preview').style.display = 'none';
+        }
+
+        function showDatasetDetails(datasetName) {
+            console.log('Showing details for dataset:', datasetName);
+            fetch(`${BASE_URL}/api/lineage/dataset/${encodeURIComponent(datasetName)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Received dataset details:', data);
+                    document.getElementById('schema-preview-title').textContent = `Dataset: ${data.dataset_name}`;
+                    
+                    // Populate upstream paths
+                    const upstreamContainer = document.getElementById('upstream-paths');
+                    upstreamContainer.innerHTML = renderPaths(data.paths.upstream);
+                    
+                    // Populate downstream paths
+                    const downstreamContainer = document.getElementById('downstream-paths');
+                    downstreamContainer.innerHTML = renderPaths(data.paths.downstream);
+                    
+                    // Show the modal
+                    document.querySelector('.schema-overlay').style.display = 'block';
+                    document.querySelector('.schema-preview').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error fetching dataset details:', error);
+                    alert(`Error fetching dataset details: ${error.message}`);
+                });
+        }
+
+        function renderPaths(paths) {
+            if (!paths || paths.length === 0) {
+                return '<p>No paths found</p>';
+            }
+
+            return paths.map(path => {
+                console.log('Rendering path:', path);  // Debug log
+                return `
+                    <div class="path-card">
+                        <h5>${path.path}</h5>
+                        ${renderSchema(path.schema)}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderSchema(schema) {
+            console.log('Rendering schema:', schema);  // Debug log
+            if (!schema) {
+                return '<p>No schema available</p>';
+            }
+
+            try {
+                return `
+                    <table class="schema-table">
+                        <thead>
+                            <tr>
+                                <th>Column</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${Object.entries(schema).map(([column, details]) => {
+                                console.log('Processing column:', column, details);  // Debug log
+                                return `
+                                    <tr>
+                                        <td>${column}</td>
+                                        <td>${details.type || 'N/A'}</td>
+                                        <td>${details.description || 'N/A'}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                console.error('Error rendering schema:', error);
+                return '<p>Error rendering schema</p>';
+            }
+        }
+
+        // Function to update dropdown button text
+        function updateDropdownText(dropdownId, text) {
+            document.getElementById(dropdownId).textContent = text;
+        }
+
+        // Function to toggle physics text
+        function togglePhysicsText() {
+            const button = document.getElementById('controlsDropdown');
+            button.textContent = physicsEnabled ? 'Physics Off' : 'Physics On';
+        }
+
+        // Function to toggle fullscreen
+        function toggleFullscreen() {
+            const elem = document.getElementById('lineage-network');
+            if (!document.fullscreenElement) {
+                elem.requestFullscreen().catch(err => {
+                    alert(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Add fullscreen change event listener
+        function setupDoubleClickHandler() {
+            if (!network) return;
+            
+            // Remove any existing double-click handler
+            network.off('doubleClick');
+            
+            // Add the appropriate double-click handler based on view
+            network.on('doubleClick', function(params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    const node = network.body.data.nodes.get(nodeId);
+                    if (node) {
+                        if (isPathView) {
+                            // In path view, handle differently based on node type
+                            if (node.group === 'path') {
+                                // For path nodes, show schema
+                                console.log('Double-clicked path node:', node);
+                                showSchemaPreview(node.label);
+                            } else {
+                                // For dataset nodes, show full details
+                                const datasetName = node.label;
+                                console.log('Double-clicked dataset in path view:', datasetName);
+                                showDatasetDetails(datasetName);
+                            }
+                        } else {
+                            // In lineage view, always show dataset details
+                            const datasetName = node.label;
+                            console.log('Double-clicked dataset:', datasetName);
+                            showDatasetDetails(datasetName);
+                        }
+                    }
+                }
+            });
+        }
+
+        function togglePathView() {
+            isPathView = !isPathView;
+            const btn = document.querySelector('button[onclick="togglePathView()"]');
+            btn.classList.toggle('active');
+            showFullGraph();
+            // Re-setup double-click handler after view change
+            setTimeout(setupDoubleClickHandler, 100);
+        }
+
+        document.addEventListener('fullscreenchange', function() {
+            const fullscreenBtn = document.querySelector('button[onclick="toggleFullscreen()"]');
+            const icon = fullscreenBtn.querySelector('i');
+            if (document.fullscreenElement) {
+                icon.classList.remove('fa-expand');
+                icon.classList.add('fa-compress');
+            } else {
+                icon.classList.remove('fa-compress');
+                icon.classList.add('fa-expand');
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load saved theme preference
+            const savedTheme = localStorage.getItem('preferredTheme') || 'light-theme';
+            setTheme(savedTheme);
+
+            // Set initial active states for buttons
+            const viewBtn = document.querySelector('.control-group:first-child .btn:first-child');
+            if (viewBtn) viewBtn.classList.add('active');
+
+            const layoutBtn = document.querySelector('.control-group:nth-child(2) .btn:first-child');
+            if (layoutBtn) layoutBtn.classList.add('active');
+
+            const physicsBtn = document.getElementById('physicsBtn');
+            if (physicsBtn) physicsBtn.classList.add('active');
+
+            // Initialize theme button
+            const themeButtons = document.querySelectorAll('.control-group .btn[onclick*="setTheme"]');
+            themeButtons.forEach(btn => {
+                const btnTheme = btn.getAttribute('onclick').match(/['"]([^'"]+)['"]/);
+                if (btnTheme && btnTheme[1] === savedTheme) {
+                    btn.classList.add('active');
+                }
+            });
+
+            const container = document.getElementById('lineage-network');
+            if (!container) {
+                console.error('Container element not found');
+                return;
+            }
+
+            // Check container dimensions
+            const rect = container.getBoundingClientRect();
+            console.log('Container dimensions:', {
+                width: rect.width,
+                height: rect.height,
+                top: rect.top,
+                left: rect.left
+            });
+
+            // Load initial data
+            fetch(`${BASE_URL}/api/lineage`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Received data:', data);
+                    if (!data || !data.nodes || !data.edges) {
+                        throw new Error('Invalid data format received');
+                    }
+                    allNodes = data.nodes;  // Store all nodes for search
+                    console.log('Creating network with options:', getNetworkOptions());
+                    try {
+                        network = new vis.Network(container, data, getNetworkOptions());
+                        console.log('Network created successfully');
+                    } catch (error) {
+                        console.error('Error creating network:', error);
+                        throw error;
+                    }
+                    
+                    network.once('stabilizationIterationsDone', function() {
+                        network.fit({
+                            animation: {
+                                duration: 1000,
+                                easingFunction: 'easeInOutQuad'
+                            }
+                        });
+                    });
+
+                    // Setup double-click handler
+                    setupDoubleClickHandler();
+
+                    // Add click event to show dependencies
+                    network.on("click", function(params) {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            showDependencies(nodeId);
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading lineage data:', error);
+                    alert('Error loading graph data. Please check the console for details.');
+                });
+
+            // Setup search functionality
+            setupSearch();
+        });
+    </script>
+</body>
+</html>

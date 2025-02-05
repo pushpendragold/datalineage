@@ -56,12 +56,12 @@
             let html = '<table class="table schema-table">';
             html += '<thead><tr><th>Field Name</th><th>Type</th><th>Description</th></tr></thead><tbody>';
             
-            for (const field of schema) {
+            for (const [fieldName, fieldInfo] of Object.entries(schema)) {
                 html += `
                     <tr>
-                        <td>${field.name}</td>
-                        <td><code>${field.type}</code></td>
-                        <td>${field.description || ''}</td>
+                        <td>${fieldName}</td>
+                        <td><code>${fieldInfo.type}</code></td>
+                        <td>${fieldInfo.description || ''}</td>
                     </tr>
                 `;
             }

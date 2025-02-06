@@ -18,7 +18,7 @@ class Dataset(db.Model):
 
 class SchemaInfo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    dataset_path = db.Column(db.String(500), nullable=False, unique=True)
+    dataset_path = db.Column(db.String(500), nullable=False)
     schema_definition = db.Column(db.Text, nullable=False)  # JSON string of schema information
 
 @app.route('/')
@@ -57,10 +57,33 @@ def get_schema(dataset_path):
 @app.route('/api/schemas')
 def get_all_schemas():
     schemas = SchemaInfo.query.all()
-    return jsonify([{
-        'path': schema.dataset_path,
-        'schema': json.loads(schema.schema_definition)
-    } for schema in schemas])
+    formatted_schemas = []
+    
+    for schema in schemas:
+        schema_def = json.loads(schema.schema_definition)
+        formatted_schema = {}
+        
+        # Extract fields from the schema definition
+        if isinstance(schema_def, dict):
+            for field_name, field_info in schema_def.items():
+                # Skip special fields like domainMetadata, remove, metaData, etc.
+                if field_name in ['domainMetadata', 'remove', 'metaData', 'txn', 'add', 'protocol']:
+                    continue
+                    
+                # Get the type information
+                field_type = str(field_info) if isinstance(field_info, str) else 'object'
+                
+                formatted_schema[field_name] = {
+                    'type': field_type,
+                    'description': ''  # We can add descriptions later if needed
+                }
+        
+        formatted_schemas.append({
+            'path': schema.dataset_path,
+            'schema': formatted_schema
+        })
+    
+    return jsonify(formatted_schemas)
 
 def get_topological_levels(nodes, edges):
     # Create adjacency list
